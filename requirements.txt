@@ -1,0 +1,18 @@
+# Core
+fastapi==0.111.0
+uvicorn[standard]==0.29.0
+pydantic==2.7.1
+pydantic-settings==2.2.1
+python-dotenv==1.0.1
+
+# Database + Auth
+supabase==2.5.0
+
+# AI
+openai==1.30.1
+
+# Rate limiting
+redis==5.0.4
+
+# Observability (Sentry — optional, loaded only if SENTRY_DSN is set)
+sentry-sdk[fastapi]==1.45.0
