@@ -4,10 +4,10 @@ from fastapi.middleware.cors import CORSMiddleware
 
 logger = logging.getLogger(__name__)
 
-# ✅ لازم app يكون هنا كمتغير عالمي
+# لازم يكون فيه متغير اسمه app عشان uvicorn app.main:app يشتغل
 app = FastAPI(title="AIScale Pro API")
 
-# --- CORS (اختياري) ---
+# (اختياري) CORS
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -16,31 +16,14 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# --- Middleware imports (محمي عشان لا يكسر التشغيل لو اسم الكلاس مختلف) ---
-try:
-    from app.api.middleware.security_headers import SecurityHeadersMiddleware
-    app.add_middleware(SecurityHeadersMiddleware)
-except Exception as e:
-    logger.warning(f"SecurityHeadersMiddleware not loaded: {e}")
+# Middlewares
+from app.api.middleware.security_headers import SecurityHeadersMiddleware
+from app.api.middleware.logging_middleware import LoggingMiddleware
 
-try:
-    # IMPORTANT: قد يكون اسم الكلاس عندك مختلف
-    from app.api.middleware.logging_middleware import LoggingMiddleware
-    app.add_middleware(LoggingMiddleware)
-except Exception as e:
-    logger.warning(f"Logging middleware not loaded: {e}")
+app.add_middleware(SecurityHeadersMiddleware)
+app.add_middleware(LoggingMiddleware)
 
-# --- Routers ---
-try:
-    from app.api.routes import auth, users, health, ai, billing  # عدّل حسب الموجود عندك
-    app.include_router(auth.router, prefix="/api")
-    app.include_router(users.router, prefix="/api")
-    app.include_router(health.router, prefix="/api")
-    app.include_router(ai.router, prefix="/api")
-    app.include_router(billing.router, prefix="/api")
-except Exception as e:
-    logger.warning(f"Routers not fully loaded: {e}")
+# Routers (عدّل أسماء الموديولات حسب الموجود عندك داخل app/api/routes)
+from app.api.routes import auth
 
-@app.get("/")
-def root():
-    return {"status": "ok"}
+app.include_router(auth.router, prefix="/api")
