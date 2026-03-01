@@ -1,25 +1,48 @@
-import logging
+"""
+Centralized external clients initialization.
+
+- Supabase (service role) — backend only
+- OpenAI async client
+"""
+
 from supabase import create_client, Client
 from openai import AsyncOpenAI
 from app.core.config import settings
+import logging
 
 logger = logging.getLogger(__name__)
 
-def _clean(v: str | None) -> str:
-    return (v or "").strip()
 
-SUPABASE_URL = _clean(settings.SUPABASE_URL).rstrip("/")
-SUPABASE_KEY = _clean(settings.SUPABASE_SERVICE_ROLE_KEY)
+def _clean(value: str | None) -> str:
+    """
+    Clean environment variables from:
+    - leading/trailing spaces
+    - accidental newlines
+    - surrounding quotes
+    """
+    return (value or "").strip().strip('"').strip("'")
 
-if not SUPABASE_URL.startswith("https://") or ".supabase.co" not in SUPABASE_URL:
-    raise RuntimeError(f"Bad SUPABASE_URL: {SUPABASE_URL!r}")
 
-# أهم سطر: حذف أي مسافات/أسطر داخل المفتاح
-SUPABASE_KEY = SUPABASE_KEY.replace("\n", "").replace("\r", "").strip()
+# Clean environment variables
+SUPABASE_URL = _clean(settings.SUPABASE_URL)
+SUPABASE_SERVICE_ROLE_KEY = _clean(settings.SUPABASE_SERVICE_ROLE_KEY)
+OPENAI_API_KEY = _clean(settings.OPENAI_API_KEY)
 
-if not SUPABASE_KEY.startswith("eyJ"):
-    raise RuntimeError("Bad SUPABASE_SERVICE_ROLE_KEY: must be Legacy JWT starting with 'eyJ'")
 
-db: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
+# Validate presence (fail early with clear message)
+if not SUPABASE_URL:
+    raise RuntimeError("SUPABASE_URL is not set")
 
-openai_client = AsyncOpenAI(api_key=_clean(settings.OPENAI_API_KEY))
+if not SUPABASE_SERVICE_ROLE_KEY:
+    raise RuntimeError("SUPABASE_SERVICE_ROLE_KEY is not set")
+
+if not OPENAI_API_KEY:
+    logger.warning("OPENAI_API_KEY is not set — AI features may fail")
+
+
+# Create Supabase client (Service Role — backend only)
+db: Client = create_client(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
+
+
+# Create OpenAI async client
+openai_client = AsyncOpenAI(api_key=OPENAI_API_KEY)
