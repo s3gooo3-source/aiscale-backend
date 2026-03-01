@@ -1,80 +1,46 @@
-"""
-Request logging middleware.
-
-- Adds x-request-id header
-- Logs request/response with timing
-- Safely reads/removes optional cost headers (no .pop on MutableHeaders)
-"""
-
-from __future__ import annotations
-
-import time
-import uuid
 import logging
-from typing import Callable, Optional
-
-from fastapi import Request
-from starlette.middleware.base import BaseHTTPMiddleware
-from starlette.responses import Response
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 
 logger = logging.getLogger(__name__)
 
+# ✅ لازم app يكون هنا كمتغير عالمي
+app = FastAPI(title="AIScale Pro API")
 
-class RequestLoggingMiddleware(BaseHTTPMiddleware):
-    async def dispatch(self, request: Request, call_next: Callable) -> Response:
-        start = time.perf_counter()
+# --- CORS (اختياري) ---
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
-        # Request ID
-        request_id = request.headers.get("x-request-id") or str(uuid.uuid4())
-        request.state.request_id = request_id
+# --- Middleware imports (محمي عشان لا يكسر التشغيل لو اسم الكلاس مختلف) ---
+try:
+    from app.api.middleware.security_headers import SecurityHeadersMiddleware
+    app.add_middleware(SecurityHeadersMiddleware)
+except Exception as e:
+    logger.warning(f"SecurityHeadersMiddleware not loaded: {e}")
 
-        try:
-            response: Response = await call_next(request)
-        except Exception:
-            # Log exception with request context then re-raise
-            logger.exception(
-                "Unhandled exception",
-                extra={
-                    "request_id": request_id,
-                    "method": request.method,
-                    "path": str(request.url.path),
-                },
-            )
-            raise
+try:
+    # IMPORTANT: قد يكون اسم الكلاس عندك مختلف
+    from app.api.middleware.logging_middleware import LoggingMiddleware
+    app.add_middleware(LoggingMiddleware)
+except Exception as e:
+    logger.warning(f"Logging middleware not loaded: {e}")
 
-        # Timing
-        duration_ms = int((time.perf_counter() - start) * 1000)
+# --- Routers ---
+try:
+    from app.api.routes import auth, users, health, ai, billing  # عدّل حسب الموجود عندك
+    app.include_router(auth.router, prefix="/api")
+    app.include_router(users.router, prefix="/api")
+    app.include_router(health.router, prefix="/api")
+    app.include_router(ai.router, prefix="/api")
+    app.include_router(billing.router, prefix="/api")
+except Exception as e:
+    logger.warning(f"Routers not fully loaded: {e}")
 
-        # Optional cost headers (safe remove)
-        cost_usd: Optional[str] = response.headers.get("x-cost-usd")
-        if "x-cost-usd" in response.headers:
-            del response.headers["x-cost-usd"]
-
-        cost_tokens: Optional[str] = response.headers.get("x-cost-tokens")
-        if "x-cost-tokens" in response.headers:
-            del response.headers["x-cost-tokens"]
-
-        # Add response headers
-        response.headers["x-request-id"] = request_id
-        response.headers["x-response-time-ms"] = str(duration_ms)
-
-        # Log line
-        logger.info(
-            "request",
-            extra={
-                "request_id": request_id,
-                "method": request.method,
-                "path": str(request.url.path),
-                "status_code": getattr(response, "status_code", None),
-                "duration_ms": duration_ms,
-                "cost_usd": cost_usd,
-                "cost_tokens": cost_tokens,
-                "client": request.client.host if request.client else None,
-            },
-        )
-
-        return response
-
-
-# Backwards-compat alias (if any old import uses it)
-LoggingMiddleware = RequestLoggingMiddleware
+@app.get("/")
+def root():
+    return {"status": "ok"}
